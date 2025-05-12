@@ -225,9 +225,11 @@ def main() -> None:
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # publiczne
+        # publiczne
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callback_main, pattern="^(show_products|show_prices|admin_panel)$"))
+    # komenda dodawania produktów przez slash
+    app.add_handler(CommandHandler("add_product", admin_receive_add))
 
     # admin panel
     app.add_handler(CallbackQueryHandler(admin_add_callback, pattern="^admin_add$"))
