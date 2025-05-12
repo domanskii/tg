@@ -4,7 +4,6 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    InputMediaPhoto,
     ForceReply,
 )
 from telegram.ext import (
@@ -90,21 +89,6 @@ def update_description_db(prod_id: int, description: str) -> None:
     conn.close()
 
 
-def set_description_db(name: str, description: str) -> bool:
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT id FROM products WHERE name = ?", (name,))
-    row = c.fetchone()
-    if not row:
-        conn.close()
-        return False
-    prod_id = row[0]
-    c.execute("UPDATE products SET description = ? WHERE id = ?", (description, prod_id))
-    conn.commit()
-    conn.close()
-    return True
-
-
 def list_products_db() -> list:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -142,9 +126,9 @@ async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         for _, name, _, image, desc in items:
             caption = f"*{name}*"
             if desc:
-                caption += "\n\n" + desc  # poprawne składanie stringów
+                caption = caption + "\n\n" + desc
             await context.bot.send_photo(
-                chat_id=query.message.chat_id,
+                chat_id=update.effective_chat.id,
                 photo=image,
                 caption=caption,
                 parse_mode="Markdown"
@@ -234,7 +218,7 @@ async def callback_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data['edit_id'] = prod_id
         name = next(name for (i,name,_,_,_) in list_products_db() if i==prod_id)
         await query.message.reply_text(
-            f"Podaj nową cenę dla *{name}*:",
+            f"Podaj nową cenę dla *{name}*: ",
             parse_mode="Markdown",
             reply_markup=ForceReply(selective=True)
         )
@@ -243,7 +227,7 @@ async def callback_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data['desc_id'] = prod_id
         name = next(name for (i,name,_,_,_) in list_products_db() if i==prod_id)
         await query.message.reply_text(
-            f"Podaj opis dla *{name}*:",
+            f"Podaj opis dla *{name}*: ",
             parse_mode="Markdown",
             reply_markup=ForceReply(selective=True)
         )
