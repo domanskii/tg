@@ -233,20 +233,33 @@ async def admin_receive_desc(update: Update, context: ContextTypes.DEFAULT_TYPE)
 def main() -> None:
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CallbackQueryHandler(callback_admin, pattern=r'^admin_'))
+
+    # publiczne handlery
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callback_menu, pattern="^(show_).*$"))
+
+    # administrowanie
     app.add_handler(CommandHandler("add_product", add_product))
     app.add_handler(CommandHandler("list_products_admin", list_products_admin))
+
+    # dialog edycji ceny i opisu
     conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(callback_admin, pattern="^(admin_).*$")],
+        entry_points=[
+            CallbackQueryHandler(callback_admin, pattern="^(admin_edit_).*$"),
+            CallbackQueryHandler(callback_admin, pattern="^(admin_desc_).*$"),
+            CallbackQueryHandler(callback_admin, pattern="^(admin_remove_).*$"),
+        ],
         states={
-            EDIT_PRICE: [MessageHandler(filters.REPLY & ~filters.COMMAND, admin_receive_price)],
+            EDIT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_price)],
             EDIT_DESC:  [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_desc)],
         },
-        fallbacks=[], per_user=True, per_message=True
+        fallbacks=[],
+        per_user=True,
+        per_message=True,
     )
     app.add_handler(conv)
+
+    # uruchom polling
     app.run_polling()
 
 if __name__ == "__main__":
