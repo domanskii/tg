@@ -59,14 +59,12 @@ def add_product_db(name: str, price: str, image: str) -> None:
     conn.commit()
     conn.close()
 
-
 def remove_product_db(prod_id: int) -> None:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("DELETE FROM products WHERE id = ?", (prod_id,))
     conn.commit()
     conn.close()
-
 
 def update_price_db(name: str, new_price: str) -> None:
     conn = sqlite3.connect(DB_FILE)
@@ -75,13 +73,27 @@ def update_price_db(name: str, new_price: str) -> None:
     conn.commit()
     conn.close()
 
-
 def update_description_db(prod_id: int, description: str) -> None:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("UPDATE products SET description = ? WHERE id = ?", (description, prod_id))
     conn.commit()
     conn.close()
+
+def set_description_db(name: str, description: str) -> bool:
+    # helper for command-based description update
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id FROM products WHERE name = ?", (name,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return False
+    prod_id = row[0]
+    c.execute("UPDATE products SET description = ? WHERE id = ?", (description, prod_id))
+    conn.commit()
+    conn.close()
+    return True
 
 
 def list_products_db() -> list:
@@ -153,6 +165,22 @@ async def add_product(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             return
     add_product_db(name, price, image)
     await update.message.reply_text(f"✅ Dodano produkt *{name}*.", parse_mode="Markdown")
+
+async def set_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("🚫 Nie masz uprawnień.")
+        return
+    args = " ".join(context.args)
+    try:
+        name, desc = [x.strip() for x in args.split("|", 1)]
+    except ValueError:
+        await update.message.reply_text("Użycie: /set_description nazwa_produktu|opis")
+        return
+    success = set_description_db(name, desc)
+    if success:
+        await update.message.reply_text(f"✅ Opis dla *{name}* ustawiony.", parse_mode="Markdown")
+    else:
+        await update.message.reply_text(f"❌ Nie znaleziono produktu *{name}*.", parse_mode="Markdown")
 
 async def list_products_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_admin(update.effective_user.id):
@@ -240,6 +268,7 @@ def main() -> None:
 
     # administrowanie
     app.add_handler(CommandHandler("add_product", add_product))
+    app.add_handler(CommandHandler("set_description", set_description))
     app.add_handler(CommandHandler("list_products_admin", list_products_admin))
 
     # dialog edycji ceny i opisu
