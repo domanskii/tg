@@ -40,7 +40,6 @@ def init_db():
             description TEXT
         )
     """)
-    # Ensure description column exists
     try:
         c.execute("ALTER TABLE products ADD COLUMN description TEXT")
     except sqlite3.OperationalError:
@@ -139,14 +138,11 @@ async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not items:
             await query.edit_message_text("Brak produktów w ofercie.")
             return
-        # Wyślij każdy produkt jako osobną wiadomość
+        # Wyślij każdy produkt osobno
         for _, name, _, image, desc in items:
             caption = f"*{name}*"
             if desc:
-                # Dodaj dwa nowe wiersze przed opisem
-                caption += f"
-
-{desc}"
+                caption += "\n\n" + desc  # poprawne składanie stringów
             await context.bot.send_photo(
                 chat_id=query.message.chat_id,
                 photo=image,
@@ -158,12 +154,9 @@ async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not items:
             await query.edit_message_text("Brak produktów w ofercie.")
             return
-        text = "💵 *Cennik produktów:*
-
-"
+        text = "💵 *Cennik produktów:*\n\n"
         for _, name, price, _, _ in items:
-            text += f"• *{name}* – {price}
-"
+            text += f"• *{name}* – {price}\n"
         await query.edit_message_text(text, parse_mode="Markdown")
 
 # === HANDLERY ADMINISTRATORA ===
@@ -281,21 +274,14 @@ async def admin_receive_desc(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 # === URUCHAMIANIE BOTA ===
-
 def main() -> None:
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
-
-    # publiczne handlery
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callback_menu, pattern="^(show_).*$"))
-
-    # administrowanie komendami
     app.add_handler(CommandHandler("add_product", add_product))
     app.add_handler(CommandHandler("set_description", set_description))
     app.add_handler(CommandHandler("list_products_admin", list_products_admin))
-
-    # dialog edycji ceny i opisu
     conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(callback_admin, pattern="^admin_(edit|desc|remove)_.*$")],
         states={EDIT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_price)],
@@ -303,8 +289,6 @@ def main() -> None:
         fallbacks=[], per_user=True, per_message=True
     )
     app.add_handler(conv)
-
-    # uruchom polling
     app.run_polling()
 
 if __name__ == "__main__":
