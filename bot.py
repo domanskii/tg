@@ -40,6 +40,7 @@ def init_db():
             description TEXT
         )
     """)
+    # Ensure description column exists
     try:
         c.execute("ALTER TABLE products ADD COLUMN description TEXT")
     except sqlite3.OperationalError:
@@ -53,9 +54,15 @@ def add_product_db(name: str, price: str, image: str) -> None:
     c = conn.cursor()
     c.execute("SELECT id FROM products WHERE name = ?", (name,))
     if c.fetchone():
-        c.execute("UPDATE products SET price = ?, image = ? WHERE name = ?", (price, image, name))
+        c.execute(
+            "UPDATE products SET price = ?, image = ? WHERE name = ?",
+            (price, image, name)
+        )
     else:
-        c.execute("INSERT INTO products (name, price, image, description) VALUES (?, ?, ?, '')", (name, price, image))
+        c.execute(
+            "INSERT INTO products (name, price, image, description) VALUES (?, ?, ?, '')",
+            (name, price, image)
+        )
     conn.commit()
     conn.close()
 
@@ -117,7 +124,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         [InlineKeyboardButton("🛍 Sprawdź dostępne produkty", callback_data="show_products")],
         [InlineKeyboardButton("💰 Sprawdź cennik", callback_data="show_prices")],
     ]
-    await update.message.reply_text("Witaj! Wybierz co chcesz zrobić:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(
+        "Witaj! Wybierz co chcesz zrobić:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -133,9 +143,15 @@ async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         for _, name, _, image, desc in items:
             caption = f"*{name}*"
             if desc:
-                caption += f"\n\n{desc}"  # blank line for readability
-            media.append(InputMediaPhoto(media=image, caption=caption, parse_mode="Markdown"))
-        await context.bot.send_media_group(chat_id=query.message.chat_id, media=media)
+                # Preserve newlines
+                caption += f"\n\n{desc}"
+            media.append(
+                InputMediaPhoto(media=image, caption=caption, parse_mode="Markdown")
+            )
+        await context.bot.send_media_group(
+            chat_id=query.message.chat_id,
+            media=media
+        )
 
     elif data == "show_prices":
         if not items:
@@ -261,7 +277,7 @@ async def admin_receive_desc(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 # === URUCHAMIANIE BOTA ===
-```python
+
 def main() -> None:
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
@@ -277,16 +293,10 @@ def main() -> None:
 
     # dialog edycji ceny i opisu
     conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(callback_admin, pattern="^admin_(edit|desc|remove)_.*$"),
-        ],
-        states={
-            EDIT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_price)],
-            EDIT_DESC:  [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_desc)],
-        },
-        fallbacks=[],
-        per_user=True,
-        per_message=True,
+        entry_points=[CallbackQueryHandler(callback_admin, pattern="^admin_(edit|desc|remove)_.*$")],
+        states={EDIT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_price)],
+                EDIT_DESC:  [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_desc)]},
+        fallbacks=[], per_user=True, per_message=True
     )
     app.add_handler(conv)
 
@@ -295,4 +305,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-```
