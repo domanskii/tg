@@ -18,8 +18,8 @@ from telegram.ext import (
 )
 
 # === KONFIGURACJA ===
-TOKEN = "<TWÓJ_TOKEN_Z_BOTFATHER>"
-ADMIN_IDS = [123456789]
+TOKEN = "6587025285:AAHHMBAH9GzXxUp4aof-0A549xdpLwLMQu4"
+ADMIN_IDS = [1877239478]
 DB_FILE = "products.db"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
