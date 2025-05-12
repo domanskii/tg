@@ -139,9 +139,11 @@ async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not items:
             await query.edit_message_text("Brak produktów w ofercie.")
             return
+        # Wyślij każdy produkt jako osobną wiadomość
         for _, name, _, image, desc in items:
             caption = f"*{name}*"
             if desc:
+                # Dodaj dwa nowe wiersze przed opisem
                 caption += f"
 
 {desc}"
