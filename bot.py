@@ -206,15 +206,19 @@ async def admin_receive_price(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ConversationHandler.END
 
 # === URUCHAMIANIE BOTA ===
+
 def main() -> None:
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
+
+    # bezpośrednia obsługa przycisków admin_
+    app.add_handler(CallbackQueryHandler(callback_admin, pattern=r'^admin_'))
 
     # publiczne handlery
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callback_menu, pattern="^(show_).*$"))
 
-    # admin handlery
+    # administrowanie
     app.add_handler(CommandHandler("add_product", add_product))
     app.add_handler(CommandHandler("list_products_admin", list_products_admin))
 
@@ -224,6 +228,7 @@ def main() -> None:
         states={EDIT_PRICE: [MessageHandler(filters.REPLY & ~filters.COMMAND, admin_receive_price)]},
         fallbacks=[],
         per_user=True,
+        per_message=True,
     )
     app.add_handler(conv)
 
