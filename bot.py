@@ -59,12 +59,14 @@ def add_product_db(name: str, price: str, image: str) -> None:
     conn.commit()
     conn.close()
 
+
 def remove_product_db(prod_id: int) -> None:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("DELETE FROM products WHERE id = ?", (prod_id,))
     conn.commit()
     conn.close()
+
 
 def update_price_db(name: str, new_price: str) -> None:
     conn = sqlite3.connect(DB_FILE)
@@ -73,6 +75,7 @@ def update_price_db(name: str, new_price: str) -> None:
     conn.commit()
     conn.close()
 
+
 def update_description_db(prod_id: int, description: str) -> None:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -80,8 +83,8 @@ def update_description_db(prod_id: int, description: str) -> None:
     conn.commit()
     conn.close()
 
+
 def set_description_db(name: str, description: str) -> bool:
-    # helper for command-based description update
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT id FROM products WHERE name = ?", (name,))
@@ -130,7 +133,7 @@ async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         for _, name, _, image, desc in items:
             caption = f"*{name}*"
             if desc:
-                caption += f"\n{desc}"
+                caption += f"\n\n{desc}"  # blank line for readability
             media.append(InputMediaPhoto(media=image, caption=caption, parse_mode="Markdown"))
         await context.bot.send_media_group(chat_id=query.message.chat_id, media=media)
 
@@ -248,7 +251,7 @@ async def admin_receive_price(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def admin_receive_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not is_admin(update.effective_user.id):
         return ConversationHandler.END
-    text = update.message.text.strip()
+    text = update.message.text.rstrip()
     prod_id = context.user_data.pop('desc_id', None)
     if prod_id is None:
         return ConversationHandler.END
@@ -258,6 +261,7 @@ async def admin_receive_desc(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 # === URUCHAMIANIE BOTA ===
+```python
 def main() -> None:
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
@@ -266,7 +270,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callback_menu, pattern="^(show_).*$"))
 
-    # administrowanie
+    # administrowanie komendami
     app.add_handler(CommandHandler("add_product", add_product))
     app.add_handler(CommandHandler("set_description", set_description))
     app.add_handler(CommandHandler("list_products_admin", list_products_admin))
@@ -274,9 +278,7 @@ def main() -> None:
     # dialog edycji ceny i opisu
     conv = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(callback_admin, pattern="^(admin_edit_).*$"),
-            CallbackQueryHandler(callback_admin, pattern="^(admin_desc_).*$"),
-            CallbackQueryHandler(callback_admin, pattern="^(admin_remove_).*$"),
+            CallbackQueryHandler(callback_admin, pattern="^admin_(edit|desc|remove)_.*$"),
         ],
         states={
             EDIT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_price)],
@@ -293,3 +295,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+```
