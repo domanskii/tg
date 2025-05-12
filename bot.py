@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # === STANY KONWERSACJI ===
-ADD_PRODUCT, EDIT_NAME, EDIT_PRICE, EDIT_DESC = range(4)
+ADD_PRODUCT, EDIT_NAME, EDIT_PRICE = range(3)
 
 # === INICJALIZACJA BAZY ===
 def init_db():
@@ -33,8 +33,7 @@ def init_db():
             image TEXT,
             description TEXT
         )
-    """
-    )
+    """)
     conn.commit()
     conn.close()
 
@@ -43,8 +42,7 @@ def add_product_db(name: str, price: str, image: str) -> None:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute(
-        "INSERT OR REPLACE INTO products (name, price, image, description) VALUES (?, ?, ?, "
-        "COALESCE((SELECT description FROM products WHERE name=?), ''))",
+        "INSERT OR REPLACE INTO products (name, price, image, description) VALUES (?, ?, ?, COALESCE((SELECT description FROM products WHERE name=?), ''))",
         (name, price, image, name)
     )
     conn.commit()
@@ -71,12 +69,20 @@ def update_price_db(prod_id: int, new_price: str) -> None:
     conn.commit()
     conn.close()
 
-def update_desc_db(prod_id: int, new_desc: str) -> None:
+def set_description_db(name: str, description: str) -> bool:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("UPDATE products SET description = ? WHERE id = ?", (new_desc, prod_id))
+    c.execute("SELECT id FROM products WHERE name = ?", (name,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return False
+    prod_id = row[0]
+    c.execute("UPDATE products SET description = ? WHERE id = ?", (description, prod_id))
     conn.commit()
     conn.close()
+    return True
+
 
 def list_products_db() -> list:
     conn = sqlite3.connect(DB_FILE)
@@ -86,11 +92,11 @@ def list_products_db() -> list:
     conn.close()
     return items
 
-# === SPRAWDZANIE UPRAWNIEŃ ===
+# === AUTORYZACJA ===
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
-# === HANDLERY PUBLICZNE ===
+# === PUBLICZNE HANDLERY ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     buttons = [
         [InlineKeyboardButton("🛍 Produkty", callback_data="show_products")],
@@ -113,7 +119,7 @@ async def callback_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not items:
             await query.edit_message_text("Brak produktów.")
             return
-        for prod_id, name, price, image, desc in items:
+        for _, name, price, image, desc in items:
             caption = f"*{name}*"
             if desc:
                 caption += "\n\n" + desc
@@ -132,14 +138,14 @@ async def callback_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     elif data == "admin_panel" and is_admin(query.from_user.id):
         buttons = [
             [InlineKeyboardButton("➕ Dodaj produkt", callback_data="admin_add")],
-            [InlineKeyboardButton("📋 Lista", callback_data="admin_list")]
+            [InlineKeyboardButton("📋 Lista produktów", callback_data="admin_list")]
         ]
         await query.edit_message_text("Panel administratora:", reply_markup=InlineKeyboardMarkup(buttons))
 
-# === HANDLERY ADMINA ===
+# === ADMIN HANDLERY ===
 async def admin_add_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.message.reply_text(
-        "Podaj dane produktu: nazwa|cena|url lub prześlij zdjęcie z opisem nazwa|cena",
+        "Wprowadź produkt: nazwa|cena|url lub prześlij zdjęcie z polami nazwa|cena",
         reply_markup=ForceReply(selective=True)
     )
     return ADD_PRODUCT
@@ -153,7 +159,6 @@ async def admin_list_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         buttons = [
             InlineKeyboardButton("✏️ Nazwa", callback_data=f"admin_name_{prod_id}"),
             InlineKeyboardButton("✏️ Cena", callback_data=f"admin_price_{prod_id}"),
-            InlineKeyboardButton("✏️ Opis", callback_data=f"admin_desc_{prod_id}"),
             InlineKeyboardButton("🗑 Usuń", callback_data=f"admin_remove_{prod_id}"),
         ]
         await update.callback_query.message.reply_text(
@@ -168,7 +173,7 @@ async def admin_remove_callback(update: Update, context: ContextTypes.DEFAULT_TY
     remove_product_db(prod_id)
     await query.edit_message_text("✅ Produkt usunięty.")
 
-async def admin_product_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def admin_product_edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data = update.callback_query.data
     prod_id = int(data.split("_")[-1])
     context.user_data['prod_id'] = prod_id
@@ -178,31 +183,24 @@ async def admin_product_entry(update: Update, context: ContextTypes.DEFAULT_TYPE
     if data.startswith("admin_price_"):
         await update.callback_query.message.reply_text("Podaj nową cenę:", reply_markup=ForceReply(selective=True))
         return EDIT_PRICE
-    if data.startswith("admin_desc_"):
-        await update.callback_query.message.reply_text("Podaj nowy opis:", reply_markup=ForceReply(selective=True))
-        return EDIT_DESC
 
 async def admin_receive_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Pobierz tekst i usuń prefiks komendy, jeśli istnieje
     text = update.message.text or ""
-    if text.startswith("/add_product"):
-        parts_cmd = text.split(" ", 1)
-        text = parts_cmd[1] if len(parts_cmd) > 1 else ""
-    # Pobierz file_id, jeśli przesłano zdjęcie
     photo = update.message.photo[-1].file_id if update.message.photo else None
-    # Rozbij na części: nazwa|cena|[url]
-    parts = text.strip().split("|", 2)
-    if photo and len(parts) >= 2:
+    if text.startswith("/add_product"):
+        parts = text.split(" ",1)[1].split("|",2)
+    else:
+        parts = text.strip().split("|",2)
+    if photo and len(parts)>=2:
         name, price = parts[0].strip(), parts[1].strip()
         image = photo
-    elif len(parts) == 3:
+    elif len(parts)==3:
         name, price, image = (p.strip() for p in parts)
     else:
-        await update.message.reply_text("Błędne dane, spróbuj ponownie.")
+        await update.message.reply_text("Błędne dane.")
         return ADD_PRODUCT
-    # Dodaj do bazy i potwierdź
     add_product_db(name, price, image)
-    await update.message.reply_text(f"✅ Dodano produkt *{name}*.", parse_mode="Markdown")
+    await update.message.reply_text(f"✅ Dodano *{name}*.", parse_mode="Markdown")
     return ConversationHandler.END
 
 async def admin_receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -219,48 +217,46 @@ async def admin_receive_price(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(f"✅ Zmieniono cenę na *{new_price}*.", parse_mode="Markdown")
     return ConversationHandler.END
 
-async def admin_receive_desc(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    new_desc = update.message.text.strip()
-    prod_id = context.user_data.pop('prod_id')
-    update_desc_db(prod_id, new_desc)
-    await update.message.reply_text("✅ Zmieniono opis.")
-    return ConversationHandler.END
+async def cmd_set_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("🚫 Brak uprawnień.")
+        return
+    args = " ".join(context.args)
+    try:
+        name, desc = args.split("|",1)
+    except ValueError:
+        await update.message.reply_text("Użycie: /set_description nazwa|opis")
+        return
+    if set_description_db(name.strip(), desc.strip()):
+        await update.message.reply_text(f"✅ Opis dla *{name.strip()}* ustawiony.", parse_mode="Markdown")
+    else:
+        await update.message.reply_text(f"❌ Nie znaleziono produktu *{name.strip()}*.", parse_mode="Markdown")
 
-# === URUCHAMIANIE BOTA ===
-
+# === URUCHAMIANIE ===
 def main() -> None:
     init_db()
     app = ApplicationBuilder().token(TOKEN).build()
-
-        # publiczne
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callback_main, pattern="^(show_products|show_prices|admin_panel)$"))
-    # komenda dodawania produktów przez slash
     app.add_handler(CommandHandler("add_product", admin_receive_add))
-
-    # admin panel
+    app.add_handler(CommandHandler("set_description", cmd_set_description))
     app.add_handler(CallbackQueryHandler(admin_add_callback, pattern="^admin_add$"))
     app.add_handler(CallbackQueryHandler(admin_list_callback, pattern="^admin_list$"))
     app.add_handler(CallbackQueryHandler(admin_remove_callback, pattern="^admin_remove_"))
-
-    # conversation for add/edit
+    app.add_handler(CallbackQueryHandler(admin_product_edit_callback, pattern="^admin_(name|price)_"))
     conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(admin_add_callback, pattern="^admin_add$"),
-            CallbackQueryHandler(admin_product_entry, pattern="^admin_(name|price|desc)_"),
+            CallbackQueryHandler(admin_product_edit_callback, pattern="^admin_(name|price)_"),
         ],
         states={
             ADD_PRODUCT: [MessageHandler(filters.TEXT | filters.PHOTO, admin_receive_add)],
-            EDIT_NAME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_name)],
-            EDIT_PRICE:   [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_price)],
-            EDIT_DESC:    [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_desc)],
+            EDIT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_name)],
+            EDIT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_receive_price)],
         },
-        fallbacks=[],
-        per_user=True,
-        per_message=True,
+        fallbacks=[], per_user=True, per_message=True
     )
     app.add_handler(conv)
-
     app.run_polling()
 
 if __name__ == "__main__":
