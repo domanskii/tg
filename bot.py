@@ -139,27 +139,29 @@ async def callback_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not items:
             await query.edit_message_text("Brak produktów w ofercie.")
             return
-        media = []
         for _, name, _, image, desc in items:
             caption = f"*{name}*"
             if desc:
-                # Preserve newlines
-                caption += f"\n\n{desc}"
-            media.append(
-                InputMediaPhoto(media=image, caption=caption, parse_mode="Markdown")
+                caption += f"
+
+{desc}"
+            await context.bot.send_photo(
+                chat_id=query.message.chat_id,
+                photo=image,
+                caption=caption,
+                parse_mode="Markdown"
             )
-        await context.bot.send_media_group(
-            chat_id=query.message.chat_id,
-            media=media
-        )
 
     elif data == "show_prices":
         if not items:
             await query.edit_message_text("Brak produktów w ofercie.")
             return
-        text = "💵 *Cennik produktów:*\n\n"
+        text = "💵 *Cennik produktów:*
+
+"
         for _, name, price, _, _ in items:
-            text += f"• *{name}* – {price}\n"
+            text += f"• *{name}* – {price}
+"
         await query.edit_message_text(text, parse_mode="Markdown")
 
 # === HANDLERY ADMINISTRATORA ===
