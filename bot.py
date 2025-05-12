@@ -183,8 +183,14 @@ async def admin_product_entry(update: Update, context: ContextTypes.DEFAULT_TYPE
         return EDIT_DESC
 
 async def admin_receive_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Pobierz tekst i usuń prefiks komendy, jeśli istnieje
     text = update.message.text or ""
+    if text.startswith("/add_product"):
+        parts_cmd = text.split(" ", 1)
+        text = parts_cmd[1] if len(parts_cmd) > 1 else ""
+    # Pobierz file_id, jeśli przesłano zdjęcie
     photo = update.message.photo[-1].file_id if update.message.photo else None
+    # Rozbij na części: nazwa|cena|[url]
     parts = text.strip().split("|", 2)
     if photo and len(parts) >= 2:
         name, price = parts[0].strip(), parts[1].strip()
@@ -194,6 +200,7 @@ async def admin_receive_add(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         await update.message.reply_text("Błędne dane, spróbuj ponownie.")
         return ADD_PRODUCT
+    # Dodaj do bazy i potwierdź
     add_product_db(name, price, image)
     await update.message.reply_text(f"✅ Dodano produkt *{name}*.", parse_mode="Markdown")
     return ConversationHandler.END
